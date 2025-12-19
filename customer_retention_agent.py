@@ -3,8 +3,7 @@ from strands import Agent
 from strands.tools.mcp import MCPClient
 from mcp import stdio_client, StdioServerParameters
 from strands.models.bedrock import BedrockModel
-
-from bedrock_agentcore.runtime import BedrockAgentCoreApp  #Bedrock agentcoreApp
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 # Configuration for the Teradata server process using environment variables ONLY
 # Requires TERADATA_DATABASE_URI environment variable to be set
@@ -20,34 +19,26 @@ teradata_config = {
     }
 }
 
+# Configure the model for Amazon AgentCore
+CLAUDE_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
-# Configure the model for AgentCore
-#LLAMA_MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0" 
-LLAMA_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+# Create the model instance
+claude_model = BedrockModel(model_id=CLAUDE_MODEL_ID, streaming=False)
 
-
-# Create the new model instance
-llama_model = BedrockModel(model_id=LLAMA_MODEL_ID, streaming=False)
-
-# 1. Define the StdioServerParameters using the configuration
+# Create MCP client for Teradata
 server_params = StdioServerParameters(
     command=teradata_config["command"],
     args=teradata_config["args"],
     env=teradata_config["env"]
 )
 
-# 2. Create the MCP client tool using a lambda factory
-# This passes the *config* to the stdio client, not the MCPClient itself.
-teradata_tool = MCPClient(
-    lambda: stdio_client(server_params)
-    
-)
+teradata_tool = MCPClient(lambda: stdio_client(server_params))
 
-app = BedrockAgentCoreApp()  #Bedrock AgentCoreApp
+app = BedrockAgentCoreApp()
 
 @app.entrypoint
 def invoke(payload):
-    # Specialized system prompt for customer retention - HIGH BUSINESS IMPACT
+    # Specialized system prompt for customer retention
     system_prompt = """You are a Customer Retention Intelligence specialist for a European bank with 10,000 customers across France, Germany, and Spain. Your mission is to prevent customer churn and maximize customer lifetime value.
 
 **CURRENT PORTFOLIO CONTEXT:**
@@ -77,6 +68,12 @@ def invoke(payload):
 - Product cross-sell opportunities for at-risk customers
 - Geographic-specific retention strategies (France vs Germany vs Spain)
 
+📊 **Performance Monitoring**:
+- Track retention campaign effectiveness
+- Monitor churn rate trends by segment
+- Measure customer satisfaction indicators
+- A/B testing results for retention strategies
+
 **KEY CHURN INDICATORS TO ANALYZE:**
 - Balance trends (declining balances indicate risk)
 - Product usage (single product customers higher risk)
@@ -98,17 +95,24 @@ def invoke(payload):
 - Flag urgent cases requiring immediate intervention (within 24-48 hours)
 - Calculate revenue impact in dollars for all recommendations
 
+**SAMPLE ANALYSES:**
+- "Show me high-value customers (>$100K) at immediate risk of churning"
+- "Analyze churn patterns by geography and recommend targeted campaigns"
+- "Identify inactive customers suitable for re-engagement"
+- "Calculate revenue impact if we lose our top 50 at-risk customers"
+
 Focus on actionable insights that can immediately reduce the 20.37% churn rate and protect the $765M deposit base."""
 
-    # Create customer retention agent for maximum business impact
-    agent = Agent(
-        model=llama_model, 
+    # Create customer retention agent
+    retention_agent = Agent(
+        model=claude_model, 
         tools=[teradata_tool],
         system_prompt=system_prompt
     )
+    
     user_message = payload.get("prompt", "Show me customers at highest risk of churning and calculate the revenue impact")
-    result = agent(user_message)
-    return {"response": result.message} # The output format expected by AgentCore
+    result = retention_agent(user_message)
+    return {"response": result.message}
 
 if __name__ == "__main__":
     app.run()
