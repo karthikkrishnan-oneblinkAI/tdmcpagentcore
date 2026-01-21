@@ -1,17 +1,35 @@
+#!/usr/bin/env python3
+"""
+Teradata Workshop Agent
+Connects to shared Teradata cluster via MCP and provides AI-powered banking analytics.
+
+Configuration via .env file:
+- TERADATA_DATABASE_URI: Connection string to Teradata cluster
+
+AWS credentials come from EC2 IAM role automatically.
+"""
+
 import os
+from dotenv import load_dotenv
+
+# Load .env file BEFORE reading environment variables
+load_dotenv()
+
 from strands import Agent
 from strands.tools.mcp import MCPClient
 from mcp import stdio_client, StdioServerParameters
 from strands.models.bedrock import BedrockModel
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-from bedrock_agentcore.runtime import BedrockAgentCoreApp  #Bedrock agentcoreApp
-
-# Configuration for the Teradata server process using environment variables ONLY
-# Requires TERADATA_DATABASE_URI environment variable to be set
+# Get database URI from environment (.env file)
 database_uri = os.getenv("TERADATA_DATABASE_URI")
 if not database_uri:
-    raise ValueError("TERADATA_DATABASE_URI environment variable is required but not set")
+    raise ValueError(
+        "TERADATA_DATABASE_URI environment variable is required.\n"
+        "Check your .env file or run: cat .env"
+    )
 
+# MCP Server configuration
 teradata_config = {
     "command": "uvx",
     "args": ["teradata-mcp-server"],
@@ -20,95 +38,111 @@ teradata_config = {
     }
 }
 
+# Model configuration
+MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
 
-# Configure the model for AgentCore
-#LLAMA_MODEL_ID = "anthropic.claude-3-sonnet-20240229-v1:0" 
-LLAMA_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+# Create model and MCP client
+model = BedrockModel(model_id=MODEL_ID, streaming=False)
 
-
-# Create the new model instance
-llama_model = BedrockModel(model_id=LLAMA_MODEL_ID, streaming=False)
-
-# 1. Define the StdioServerParameters using the configuration
 server_params = StdioServerParameters(
     command=teradata_config["command"],
     args=teradata_config["args"],
     env=teradata_config["env"]
 )
 
-# 2. Create the MCP client tool using a lambda factory
-# This passes the *config* to the stdio client, not the MCPClient itself.
-teradata_tool = MCPClient(
-    lambda: stdio_client(server_params)
-    
-)
+teradata_tool = MCPClient(lambda: stdio_client(server_params))
 
-app = BedrockAgentCoreApp()  #Bedrock AgentCoreApp
+# AgentCore app
+app = BedrockAgentCoreApp()
 
 @app.entrypoint
 def invoke(payload):
-    # Specialized system prompt for customer retention - HIGH BUSINESS IMPACT
-    system_prompt = """You are a Customer Retention Intelligence specialist for a European bank with 10,000 customers across France, Germany, and Spain. Your mission is to prevent customer churn and maximize customer lifetime value.
+    """AgentCore entry point"""
+    
+    system_prompt = """You are a Banking Data Analyst with direct access to a Teradata database 
+containing customer data for a European bank.
 
-**CURRENT PORTFOLIO CONTEXT:**
-- 10,000 customers with $765M total deposits ($76.5K average)
-- 20.37% churn rate (2,037 customers lost) - URGENT PRIORITY
-- Average credit score: 651 (good quality portfolio)
-- Geographic spread: France, Germany, Spain
-- Product mix: 1-4 products per customer, credit cards, various balances
+**Available Data:**
+- 10,000 customers across France, Germany, and Spain
+- Customer demographics, balances, credit scores
+- Product usage and activity status
+- Churn indicators
 
-**YOUR EXPERTISE:**
+**Your Capabilities:**
+- Query customer data using SQL via the Teradata MCP tool
+- Analyze patterns in customer behavior
+- Identify risks and opportunities
+- Provide actionable business insights
 
-🚨 **Churn Risk Analysis**:
-- Identify customers with highest churn probability using behavioral indicators
-- Calculate revenue at risk from potential churners
-- Segment customers by churn risk: High (>70%), Medium (30-70%), Low (<30%)
-- Analyze churn patterns by geography, demographics, and product usage
+**Guidelines:**
+- Always show sample data (first 5-10 rows) to support your analysis
+- Calculate relevant metrics and statistics
+- Provide clear, actionable recommendations
+- Be specific with numbers and percentages
 
-💰 **Revenue Impact Assessment**:
-- Calculate customer lifetime value and potential revenue loss
-- Prioritize retention efforts by customer value and churn probability
-- Identify high-value customers (>$100K balance) at risk
-- Estimate ROI of retention campaigns by segment
+Start by understanding what databases and tables are available, then help the user analyze their data."""
 
-🎯 **Retention Strategy Recommendations**:
-- Personalized retention offers based on customer profiles
-- Optimal contact timing and channel recommendations
-- Product cross-sell opportunities for at-risk customers
-- Geographic-specific retention strategies (France vs Germany vs Spain)
-
-**KEY CHURN INDICATORS TO ANALYZE:**
-- Balance trends (declining balances indicate risk)
-- Product usage (single product customers higher risk)
-- Activity levels (IsActiveMember = 0 indicates disengagement)
-- Credit profile changes
-- Geographic and demographic patterns
-- Tenure vs churn correlation
-
-**CRITICAL SUCCESS METRICS:**
-- Reduce churn from 20.37% to <15% (target: $5-10M annual savings)
-- Increase customer lifetime value by 25%
-- Improve retention campaign response rates to >40%
-- Achieve 3:1 ROI on retention investments
-
-**OUTPUT REQUIREMENTS:**
-- Show actual customer data (first 10 rows) with clear risk scores
-- Provide specific, actionable recommendations with expected impact
-- Include confidence levels and statistical significance
-- Flag urgent cases requiring immediate intervention (within 24-48 hours)
-- Calculate revenue impact in dollars for all recommendations
-
-Focus on actionable insights that can immediately reduce the 20.37% churn rate and protect the $765M deposit base."""
-
-    # Create customer retention agent for maximum business impact
     agent = Agent(
-        model=llama_model, 
+        model=model,
         tools=[teradata_tool],
         system_prompt=system_prompt
     )
-    user_message = payload.get("prompt", "Show me customers at highest risk of churning and calculate the revenue impact")
+    
+    user_message = payload.get("prompt", "What databases and tables are available?")
     result = agent(user_message)
-    return {"response": result.message} # The output format expected by AgentCore
+    return {"response": result.message}
+
+
+def interactive_mode():
+    """Run agent in interactive REPL mode (for local testing)"""
+    
+    print("=" * 60)
+    print("Teradata Workshop Agent - Interactive Mode")
+    print("=" * 60)
+    
+    # Show connection info (hide password)
+    uri_display = database_uri.split('@')[1] if '@' in database_uri else database_uri
+    print(f"Connected to: {uri_display}")
+    print("Type 'quit' or 'exit' to stop")
+    print("=" * 60)
+    print()
+    
+    system_prompt = """You are a Banking Data Analyst with access to Teradata.
+Help users query and analyze customer banking data.
+Show sample data to support your analysis."""
+
+    agent = Agent(
+        model=model,
+        tools=[teradata_tool],
+        system_prompt=system_prompt
+    )
+    
+    while True:
+        try:
+            query = input("You: ").strip()
+            if query.lower() in ['quit', 'exit', 'q']:
+                print("Goodbye!")
+                break
+            if not query:
+                continue
+                
+            print("\nAgent: Thinking...\n")
+            result = agent(query)
+            print(f"Agent: {result.message}\n")
+            
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"\nError: {e}\n")
+
 
 if __name__ == "__main__":
-    app.run()
+    import sys
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--interactive":
+        # Run in interactive mode for local testing
+        interactive_mode()
+    else:
+        # Run as AgentCore service
+        app.run()

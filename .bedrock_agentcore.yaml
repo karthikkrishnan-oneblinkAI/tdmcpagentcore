@@ -1,60 +1,26 @@
+# Teradata Workshop - AgentCore Configuration
+# No hardcoded account IDs - auto-created per account on first deploy
+
 default_agent: agent
 agents:
   agent:
-    name: agent
-    entrypoint: C:/work/tdmcpagentcore/agent.py
+    name: teradata-workshop-agent
+    entrypoint: /home/ubuntu/workshop/agent.py
     deployment_type: container
-    runtime_type: null
     platform: linux/arm64
-    container_runtime: none
-    source_path: C:\work\tdmcpagentcore
+    source_path: /home/ubuntu/workshop
+    
     aws:
-      execution_role: arn:aws:iam::916169960469:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-d4f0bc5a29
-      execution_role_auto_create: false
-      account: '916169960469'
+      # Auto-create resources in the EC2's AWS account
+      execution_role_auto_create: true
+      ecr_auto_create: true
       region: us-east-1
-      ecr_repository: 916169960469.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-agent
-      ecr_auto_create: false
-      s3_path: null
-      s3_auto_create: false
+      
       network_configuration:
         network_mode: PUBLIC
-        network_mode_config: null
-      protocol_configuration:
-        server_protocol: HTTP
+      
       observability:
         enabled: true
-      lifecycle_configuration:
-        idle_runtime_session_timeout: null
-        max_lifetime: null
-    bedrock_agentcore:
-      agent_id: agent-9bwALy2htI
-      agent_arn: arn:aws:bedrock-agentcore:us-east-1:916169960469:runtime/agent-9bwALy2htI
-      agent_session_id: 3c7e0951-df1a-4f71-9978-e2c239f7fae9
-    codebuild:
-      project_name: bedrock-agentcore-agent-builder
-      execution_role: arn:aws:iam::916169960469:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-d4f0bc5a29
-      source_bucket: bedrock-agentcore-codebuild-sources-916169960469-us-east-1
+    
     memory:
       mode: NO_MEMORY
-      memory_id: null
-      memory_arn: null
-      memory_name: null
-      event_expiry_days: 30
-      first_invoke_memory_check_done: false
-      was_created_by_toolkit: false
-    identity:
-      credential_providers: []
-      workload: null
-    aws_jwt:
-      enabled: false
-      audiences: []
-      signing_algorithm: ES384
-      issuer_url: null
-      duration_seconds: 300
-    authorizer_configuration: null
-    request_header_configuration: null
-    oauth_configuration: null
-    api_key_env_var_name: null
-    api_key_credential_provider_name: null
-    is_generated_by_agentcore_create: false
