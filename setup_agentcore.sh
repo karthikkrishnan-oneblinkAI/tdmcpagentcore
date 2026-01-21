@@ -10,17 +10,6 @@ WORKSHOP_DIR=$(pwd)
 echo "🔧 Setting up AgentCore in: $WORKSHOP_DIR"
 echo ""
 
-# Check we're in the right directory
-if [[ ! "$WORKSHOP_DIR" == *"tdmcpagentcore"* ]]; then
-    echo "⚠️  Warning: Expected to be in tdmcpagentcore directory"
-    echo "   Current: $WORKSHOP_DIR"
-    read -p "   Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-fi
-
 # Get AWS account ID from IAM role
 echo "📡 Getting AWS account info..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -83,18 +72,16 @@ CMD ["opentelemetry-instrument", "python", "agent.py"]
 DOCKER_END
 echo "   ✅ Dockerfile created"
 
-# 4. Create .bedrock_agentcore.yaml
+# 4. Create .bedrock_agentcore.yaml (minimal working config)
 echo "📝 Creating .bedrock_agentcore.yaml..."
 cat > .bedrock_agentcore.yaml << YAML_END
 default_agent: agent
 agents:
   agent:
-    name: teradata-workshop-agent
+    name: tdworkshop
     entrypoint: ${WORKSHOP_DIR}/agent.py
     deployment_type: container
-    runtime_type: null
     platform: linux/arm64
-    container_runtime: none
     source_path: ${WORKSHOP_DIR}
     aws:
       execution_role_auto_create: true
@@ -104,50 +91,16 @@ agents:
       s3_auto_create: true
       network_configuration:
         network_mode: PUBLIC
-        network_mode_config: null
-      protocol_configuration:
-        server_protocol: HTTP
       observability:
         enabled: true
-      lifecycle_configuration:
-        idle_runtime_session_timeout: null
-        max_lifetime: null
     memory:
       mode: NO_MEMORY
-      memory_id: null
-      memory_arn: null
-      memory_name: null
-      event_expiry_days: 30
-      first_invoke_memory_check_done: false
-      was_created_by_toolkit: false
-    identity:
-      credential_providers: []
-      workload: null
-    aws_jwt:
-      enabled: false
-      audiences: []
-      signing_algorithm: ES384
-      issuer_url: null
-      duration_seconds: 300
-    authorizer_configuration: null
-    request_header_configuration: null
-    oauth_configuration: null
-    api_key_env_var_name: null
-    api_key_credential_provider_name: null
-    is_generated_by_agentcore_create: false
 YAML_END
 echo "   ✅ .bedrock_agentcore.yaml created"
 
-# 5. Update agent.py to use load_dotenv if not already
+# 5. Check if agent.py has load_dotenv
 if ! grep -q "load_dotenv" agent.py 2>/dev/null; then
-    echo "📝 Adding load_dotenv to agent.py..."
-    # Create backup
-    cp agent.py agent.py.bak
-    # Add import at top
-    sed -i '1i from dotenv import load_dotenv\nload_dotenv()\n' agent.py
-    echo "   ✅ agent.py updated (backup: agent.py.bak)"
-else
-    echo "   ℹ️  agent.py already has load_dotenv"
+    echo "⚠️  Note: agent.py may need 'from dotenv import load_dotenv' and 'load_dotenv()' at top"
 fi
 
 echo ""
