@@ -21,7 +21,7 @@ if [ -n "$1" ]; then
 else
     echo "📊 Enter Teradata connection string"
     echo "   Format: teradata://user:password@host:port/database"
-    echo "   Example: teradata://dbc:TeradataTest2024@34.229.185.194:1025/BankingDB"
+    echo "   Example: teradata://xxx:yyy@11.111.185.194:1025/BankingDB"
     echo ""
     read -p "   TERADATA_DATABASE_URI: " TERADATA_URI
 fi
